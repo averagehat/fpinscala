@@ -1,4 +1,4 @@
-import scala.collection.immutable.Stream
+
 import scala.{Option => _, Some => _, Either => _, _}
 import scalaz.{\/-, -\/, \/}
 trait Stream[+A] {
@@ -96,38 +96,16 @@ object Stream {
   def apply[A](as: A*): Stream[A] =
     if (as.isEmpty) empty
     else cons(as.head, apply(as.tail: _*))
-
   def repeat[A](a: A): Stream[A] = {
-    lazy val as:Stream[A] = cons(a, as)
+    val as = Stream.cons(a, as)
     as
   }
-  //def from(n: Int): Stream[Int] = cons(n, from(n+1))
-
-  val fibs = {
-    def go(f0: Int, f1: Int): Stream[Int] = {
-      cons(f0, go(f1, f0 + f1))
-      go(0, 1)
-    }
-  }
-  //def unfold[A, S](z: S)(f: S => Option[(A, S)]) = {
-  //  def go(res: Option[(A, S)]): Stream[A] = res match {
-  //    case None => empty
-  //    case Some((v, xs)) => cons(v, go(f(xs)))
-  //  }
-  //  go(f(z))
-  //  }
-
-  // take sthe last elem and current elem
-  def unfold[A, S](z: S)(f: S => Option[(A, S)]): Stream[A] =
-    f(z) match {
-      case Some((h,s)) => cons(h, unfold(s)(f))
-      case None => empty
-    }
-
-  def from(n: Int) = unfold(n.)(
-
+  def from(n: Int): Stream[Int] =
+    repeat(n).foldRight(Stream(0))(
+      { case (x, Cons(h, t)) => Stream.cons(h() + x, Cons(h, t))
+      })
+  def unfold[A, S](z: S)(f: S => Option[(A, S)]): Stream[A] = sys.error("todo")
 }
-fib(5)
 val ones: Stream[Int] = Stream.cons(1, ones)
 ones.exists(1 == _)
 ones.find(1 == _)
@@ -147,27 +125,6 @@ Stream(1, 2, 3).map(_ + 2).toList()
 Stream(1, 2, 3).filter(_ % 2 == 0).toList()
 Stream(1, 2, 3).append(Stream(4, 5, 6)).toList //(_ % 2 == 0).toList()
 Stream("a", "b","c").flatMap(x => Stream(x, x)).toList
-Stream.repeat(3).take(3).toList() == List(3, 3, 3)
-ones.exists(1 == _)
-ones.find(1 == _)
-Stream(1, 2, 3, 4).toList()
-Stream(1, 2, 3, 4).takeWhile(_ < 3).toList()
-Stream('a, 'b, 'c, 'd, 'e).take(3).toList()
-Stream('a, 'b, 'c, 'd, 'e).drop(3).toList()
-Stream('a, 'b, 'c, 'd, 'e).forAll(_ == 'a)
-Stream(1). headOption
-Stream(1). headEither
-Stream() .headOption
-Stream() .headEither
-Stream(9,1 ,2, 3). headOption
-//val e = Stream(). headEither
-e.validation.toValidationNel
-Stream(1, 2, 3).map(_ + 2).toList()
-Stream(1, 2, 3).filter(_ % 2 == 0).toList()
-Stream(1, 2, 3).append(Stream(4, 5, 6)).toList //(_ % 2 == 0).toList()
-Stream("a", "b","c").flatMap(x => Stream(x, x)).toList
-Stream.repeat(3).take(3).toList() == List(3, 3, 3)
-Stream.from(3).take(3).toList //== List(3, 4, 5)
-Stream.fibs(4).toList()
-//Stream.from(3).take(3).toList //== List(3, 4, 5)
+Stream.repeat(3).take(5).toList() == List(5, 5, 5, 5, 5)
+Stream.from(3).take(3).toList == List(3, 4, 5)
 

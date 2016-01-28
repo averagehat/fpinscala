@@ -33,10 +33,7 @@ trait Stream[+A] {
     case (_, Empty) => sys.error("tried to drop too much")
   }
 
-  //  def takeWhile(p: A => Boolean): Stream[A] = this match {
-  //    case Cons(h, t) if p(h()) => cons(h(), t().takeWhile(p))
-  //    case _ => Empty
-  //    }
+  def tail: Stream[A] =  this.drop(1)
 
   // this works because foldRight goes backwards,
   // evaluating the end of the list first!
@@ -45,13 +42,6 @@ trait Stream[+A] {
   def takeWhile(p: A => Boolean): Stream[A] =
     this.foldRight(empty:Stream[A])(
       (x, xs) => if (p(x)) cons(x, xs) else empty)
-  //  this.foldRight((empty:Stream[A], true))(
-  //      { case (x, (xs, b)) => if (p(x) && b) (cons(x, xs), true) else (xs, false)
-  //      case _ => sys.error("bad takeWhile!")})._1
-
-  /*
-  here is some docs
-   */
   def forAll(p: A => Boolean): Boolean = this match {
     case Empty => true
     case Cons(h, t) => if (p(h())) t().forAll(p) else false
@@ -66,7 +56,6 @@ trait Stream[+A] {
 
   def map[B](f: (A => B)): Stream[B] =
     this.foldRight(empty[B])((x, z) => cons(f(x), z))
-
 
   def filter(p: A => Boolean): Stream[A] =
     this.foldRight(empty[A])(
@@ -96,78 +85,99 @@ object Stream {
   def apply[A](as: A*): Stream[A] =
     if (as.isEmpty) empty
     else cons(as.head, apply(as.tail: _*))
-
   def repeat[A](a: A): Stream[A] = {
     lazy val as:Stream[A] = cons(a, as)
     as
   }
-  //def from(n: Int): Stream[Int] = cons(n, from(n+1))
 
-  val fibs = {
-    def go(f0: Int, f1: Int): Stream[Int] = {
-      cons(f0, go(f1, f0 + f1))
-      go(0, 1)
-    }
-  }
-  //def unfold[A, S](z: S)(f: S => Option[(A, S)]) = {
-  //  def go(res: Option[(A, S)]): Stream[A] = res match {
-  //    case None => empty
-  //    case Some((v, xs)) => cons(v, go(f(xs)))
-  //  }
-  //  go(f(z))
-  //  }
-
-  // take sthe last elem and current elem
-  def unfold[A, S](z: S)(f: S => Option[(A, S)]): Stream[A] =
-    f(z) match {
-      case Some((h,s)) => cons(h, unfold(s)(f))
+//  val fibs = {
+//    def go(f0: Int, f1: Int): Stream[Int] = {
+//      cons(f0, go(f1, f0 + f1))
+//      go(0, 1)
+//    }
+//  }
+  def unfold[A, S](z: S)(f: S => Option[(A, S)]) = {
+    def go(res: Option[(A, S)]): Stream[A] = res match {
       case None => empty
+      case Some((v, xs)) => cons(v, go(f(xs)))
     }
+    go(f(z))
+  }
+  def map[A,B](xs: Stream[A])(f: A => B): Stream[B] =
+    unfold(xs)({
+      case Cons(x, xs) => Some((f(x()), xs()))
+      case empty => None
+    })
 
-  def from(n: Int) = unfold(n.)(
+  def take[A](xs: Stream[A], n: Int): Stream[A] =
+    unfold((n, xs))({
+      case (0, _) => None
+      case (n, Cons(x, xs)) => Some((x(), (n-1, xs())))
+      case (n, empty) => sys.error("taking too much")
+    })
 
+  def takeWhile[A](xs: Stream[A])(p: A => Boolean): Stream[A] =
+    unfold(xs)( {
+      case Cons(x, xs) if (p(x())) => Some((x(), xs()))
+      case _ => None
+    })
+
+  def zipWith[A,B,C](as: Stream[A], bs: Stream[B])(f: (A, B) => C): Stream[C] =
+    unfold((as, bs))({
+      case (Cons(x, xs), Cons(y, ys)) => Some((f(x(), y()), (xs(), ys())))
+      case _ => None
+    })
+
+  def constant(n: Int) = unfold(n)(x => Some((x, x)))
+
+  def from(n: Int) = unfold(n)(x => Some(x, x+1))
+
+  def fibs() = unfold( (0, 1))({case (x,y) => Some(y, (y, x+y))})
+
+  def zipAll[A,B,C](as: Stream[A], bs: Stream[B]): Stream[(Option[A], Option[B])] =
+    unfold((as, bs))({
+      case (Cons(x, xs), Cons(y, ys)) => Some((Some(x()), Some(y())), (xs(), ys()))
+      case  (Cons(x, xs), _) => Some( (Some(x()), None), (xs(), empty))
+      case  (_, Cons(y, ys)) => Some((None, Some(y())), (empty, ys()))
+      case _ => None
+    })
+
+  def startsWith[A](sup: Stream[A], sub: Stream[A]): Boolean =
+    !(takeWhile(zipAll(sup, sub))(x => x._2 != None).exists(x => x._1 != x._2))
+//NOTE: need to match on upper-case Case, otherwise taken as an identifier!
+  // e.g. Empty/empty in this func
+  def tails[A](as: Stream[A]): Stream[Stream[A]] =
+    Stream.cons(as, unfold(as)({
+      case Empty => None
+      case xs => Some(xs.tail, xs.tail)
+    }))
+
+  def hasSubSequence[A](sup: Stream[A], sub:Stream[A]): Boolean =
+    tails(sup).exists(xs => startsWith(xs, sub))
 }
-fib(5)
-val ones: Stream[Int] = Stream.cons(1, ones)
-ones.exists(1 == _)
-ones.find(1 == _)
-Stream(1, 2, 3, 4).toList()
-Stream(1, 2, 3, 4).takeWhile(_ < 3).toList()
-Stream('a, 'b, 'c, 'd, 'e).take(3).toList()
-Stream('a, 'b, 'c, 'd, 'e).drop(3).toList()
-Stream('a, 'b, 'c, 'd, 'e).forAll(_ == 'a)
-Stream(1). headOption
-Stream(1). headEither
-Stream() .headOption
-Stream() .headEither
-Stream(9,1 ,2, 3). headOption
-val e = Stream(). headEither
-e.validation.toValidationNel
-Stream(1, 2, 3).map(_ + 2).toList()
-Stream(1, 2, 3).filter(_ % 2 == 0).toList()
-Stream(1, 2, 3).append(Stream(4, 5, 6)).toList //(_ % 2 == 0).toList()
-Stream("a", "b","c").flatMap(x => Stream(x, x)).toList
-Stream.repeat(3).take(3).toList() == List(3, 3, 3)
-ones.exists(1 == _)
-ones.find(1 == _)
-Stream(1, 2, 3, 4).toList()
-Stream(1, 2, 3, 4).takeWhile(_ < 3).toList()
-Stream('a, 'b, 'c, 'd, 'e).take(3).toList()
-Stream('a, 'b, 'c, 'd, 'e).drop(3).toList()
-Stream('a, 'b, 'c, 'd, 'e).forAll(_ == 'a)
-Stream(1). headOption
-Stream(1). headEither
-Stream() .headOption
-Stream() .headEither
-Stream(9,1 ,2, 3). headOption
-//val e = Stream(). headEither
-e.validation.toValidationNel
-Stream(1, 2, 3).map(_ + 2).toList()
-Stream(1, 2, 3).filter(_ % 2 == 0).toList()
-Stream(1, 2, 3).append(Stream(4, 5, 6)).toList //(_ % 2 == 0).toList()
-Stream("a", "b","c").flatMap(x => Stream(x, x)).toList
-Stream.repeat(3).take(3).toList() == List(3, 3, 3)
-Stream.from(3).take(3).toList //== List(3, 4, 5)
-Stream.fibs(4).toList()
-//Stream.from(3).take(3).toList //== List(3, 4, 5)
 
+// create private constructors to enforce Non-empty type!
+//
+
+
+//Stream.repeat(3).take(3).toList() == List(3, 3, 3)
+//Stream.constant(3).take(3).toList() == List(3, 3, 3)
+//Stream.from(3).take(3).toList //== List(3, 4, 5)
+////Stream.fibs(4).toList()
+////Stream.from(3).take(3).toList //== List(3, 4, 5)
+//Stream.fibs().take(5). toList
+//Stream.map(Stream.constant(1))(_ + 3).take(3).toList
+//Stream.map(Stream.from(3))(_ + 10).takeip(3).toList
+Stream.take(Stream.constant(3), 3).toList
+Stream.takeWhile(Stream.from(1))(_ < 3).toList
+Stream.zipWith(Stream.constant(1), Stream.from(3).take(3))(_ + _).toList
+Stream.zipAll(Stream.constant(3).take(4), Stream.constant(9).take(2)).toList
+Stream.startsWith(Stream(1, 2, 3), Stream(1, 2,3)) //true cases
+Stream.startsWith(Stream(1, 2, 3), Stream(1, 2))
+Stream.startsWith(Stream(1, 2, 3), Stream(1))
+Stream.startsWith(Stream(1, 2, 3), Stream(1, 4)) // false casesk
+Stream.startsWith(Stream(1, 2, 3), Stream(4))
+Stream.startsWith(Stream(2, 3), Stream(2, 3, 4))
+Stream.tails(Stream(10, 11, 12, 13)).toList map(_.toList)
+
+Stream.hasSubSequence(Stream(1, 2, 3, 4, 5, 6), Stream(3, 4))
